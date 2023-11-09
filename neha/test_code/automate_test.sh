@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Read the API key from an environment variable
-API_KEY="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"
+API_KEY=$OPENAI_API_KEY
 
 # Check if parameter name and method name are provided
 if [ $# -ne 2 ]; then
@@ -34,13 +34,13 @@ JSON_DATA=$(jq -n \
 
 RESPONSE=$(curl -X POST "https://api.openai.com/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer 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" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
   --data "$JSON_DATA")
 # echo $RESPONSE
 
 # Extracting the unit test code from the response
 UNIT_TEST_CODE=$(echo $RESPONSE | jq -r '.choices[0].message.content')
-# echo $UNIT_TEST_CODE
+echo $UNIT_TEST_CODE
 
 # Check if we got a valid response
 if [ -z "$UNIT_TEST_CODE" ]; then
@@ -64,7 +64,7 @@ fi
 CLEANED_UNIT_TEST_CODE=$(echo "$UNIT_TEST_CODE" | sed 's/^```java//' | sed 's/```$//')
 
 # Check the cleaned code
-echo "$CLEANED_UNIT_TEST_CODE"
+# echo "$CLEANED_UNIT_TEST_CODE"
 # sed -i '1s/^```java//' "$CLEANED_UNIT_TEST_CODE" # Removes the ```java\n at the beginning of the file
 # sed -i '$ s/```$//' "$CLEANED_UNIT_TEST_CODE" # Removes the ``` at the end of the file
 
@@ -94,82 +94,64 @@ cd "$HADOOP_COMMON_PATH" || exit
 
 # Run test case and capture error message if any
 # TEST_OUTPUT=$(mvn test -Dtest=org.apache.hadoop.util.LineReaderTest -DfailIfNoTests=false 2>&1)
-BUILD_OUTPUT=$(mvn clean install -DskipTests 2>&1)
 
-ERROR_COUNT=0
-while [[ $BUILD_OUTPUT == *"[ERROR]"* ]]; do
-  echo "Error detected in test run. Asking GPT for help..."
-  
-  # Extract error message
-  ERROR_MSG=$(echo "$BUILD_OUTPUT" | grep "[ERROR]" -A 3 | tail -n 1)
-  
-  # Ask GPT-3 for help
-  PROMPT="The  Java unit test you provided failed with the error: $ERROR_MSG. Please suggest a fix to resolve this error. Provide complete test code without any explanations. "
+# Check if build was successful
+# Function to send error to GPT and get response
+send_to_gpt() {
+    local ERROR_MESSAGE="$1"
+    echo "Received error message: $ERROR_MESSAGE"
 
-  JSON_DATA = $(jq -n \
-  --arg prompt "The  Java unit test you provided failed with the error: $ERROR_MSG. Please suggest a fix to resolve this error. Provide complete test code without any explanations. " \
-  --arg model "gpt-4" \
-  '{
-    model: $model,
-    prompt: $prompt,
-    temperature: 0,
-    max_tokens: 1000
-  }')
-  # echo "JSON payload: $JSON_DATA"
+    local ERROR_PROMPT="The Java unit test failed with the following error: $ERROR_MESSAGE. Please suggest a fix to resolve this error. Provide complete test code without any explanations."
+    echo "Constructed prompt: $ERROR_PROMPT"
 
-  RESPONSE=$(curl -X POST "https://api.openai.com/v1/engines/gpt-4.0-turbo/completions" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer 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" \
-    --data "$JSON_DATA")
-  # echo $RESPONSE
+    local ERROR_JSON=$(jq -n \
+        --arg prompt "$ERROR_PROMPT" \
+        --arg model "gpt-4" \
+        '{
+            model: $model,
+            messages: [{ "role": "system", "content": "You are a helpful assistant." }, { "role": "user", "content": $prompt }],
+                    temperature: 0,
+            max_tokens: 1000
+        }')
+    echo "JSON payload: $ERROR_JSON"
 
+    RESPONSE=$(curl -X POST "https://api.openai.com/v1/chat/completions" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        --data "$ERROR_JSON")
 
-  # Extract suggested fix from GPT-4 response
-  SUGGESTED_FIX=$(echo $RESPONSE | jq -r '.choices[0].message.content')
+    if [ -z "$RESPONSE" ]; then
+        echo "Error: No response from GPT API."
+        return 1
+    else
+        echo "$RESPONSE"
+    fi
+}
 
-  # Check if we got a valid response
-  if [ -z "$SUGGESTED_FIX" ]; then
-    echo "Failed to generate suggested fix. Exiting."
-    exit 1
-  fi
+for ATTEMPT in {1..5}; do
+    echo "Attempt $ATTEMPT"
+    BUILD_OUTPUT=$(mvn clean install -DskipTests 2>&1)
+    echo "$BUILD_OUTPUT"
 
-  # Backup existing test file
-  cp "$TEST_FILE_PATH" "$TEST_FILE_PATH.bak"
+    if echo "$BUILD_OUTPUT" | grep -q "BUILD FAILURE"; then
+        echo "Build failed. Sending error to GPT..."
+        echo "$BUILD_OUTPUT"
+        # ERROR_MSG=$(echo "$BUILD_OUTPUT" | sed -n '/\[INFO\] BUILD FAILURE \[INFO\]/,/\[ERROR\] Re-run Maven using the -X switch to enable full debug logging./p' | sed '$d' | jq -aRs .)
+        ERROR_MSG=$(echo "$BUILD_OUTPUT" | grep -zo "\[ERROR\](.|\n)*")
+        echo "Error message: $ERROR_MSG"
+        
+        echo "Sending extracted error to GPT function..."
+        GPT_RESPONSE=$(send_to_gpt "$ERROR_MSG")
 
-  
-  # Inject suggested fix into test file
-  sed -i "/RESPONSE_PLACEHOLDER/i $SUGGESTED_FIX" "$TEST_FILE_PATH"
+        echo "Response received from GPT function:"
+        echo "$GPT_RESPONSE"
+        echo "$GPT_RESPONSE" | jq '.'
 
-  # Build Hadoop Common project
-  cd "$HADOOP_COMMON_PATH" || exit
-  mvn clean install -DskipTests
-
-  # Check if build was successful
-  if [ $? -ne 0 ]; then
-    echo "Build failed. Restoring original test file and exiting."
-    mv "$TEST_FILE_PATH.bak" "$TEST_FILE_PATH"
-    exit 1
-  fi
-
-
-  # Re-run test
-  TEST_OUTPUT=$(mvn test -Dtest=TestConfiguration -DfailIfNoTests=false 2>&1)
-
-  ERROR_COUNT=$((ERROR_COUNT+1))
-  if [ $ERROR_COUNT -eq 10 ]; then
-    echo "Failed to resolve test errors after $ERROR_COUNT attempts. Giving up."
-    break
-  fi
+        SUGGESTED_FIX=$(echo "$GPT_RESPONSE" | jq -r '.choices[0].text')
+        echo "Suggested fix:"
+        echo "$SUGGESTED_FIX"
+    else
+        echo "Build succeeded."
+        break
+    fi
 done
-
-# Check if we resolved the errors
-if [[ ! $TEST_OUTPUT == *"[ERROR]"* ]]; then
-  echo "Test passed after $ERROR_COUNT retries."
-else
-  echo "Failed to resolve test errors after $ERROR_COUNT attempts. Test output: "
-  echo "$TEST_OUTPUT"
-fi
-
-# Restore original test file
-mv "$TEST_FILE_PATH.bak" "$TEST_FILE_PATH"
-
