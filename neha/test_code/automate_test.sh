@@ -14,19 +14,39 @@ PARAMETER_NAME=$1
 METHOD_NAME=$2
 
 # package org.apache.hadoop.util;
+# Define the license header and package declaration
+LICENSE_HEADER="/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * \"License\"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an \"AS IS\" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.hadoop.llmgenerated;"
+
 # Set Hadoop Common project path
 HADOOP_COMMON_PATH="/home/nvadde2/hadoop/hadoop-common-project/hadoop-common"
-TEST_FILE_PATH="$HADOOP_COMMON_PATH/src/test/java/org/apache/hadoop/util/LineReaderTest.java"
+TEST_FILE_PATH="$HADOOP_COMMON_PATH/src/test/java/org/apache/hadoop/llmgenerated/TestHttpServer.java"
 
 # Query GPT-4 for response
-PROMPT="Generate a Java unit test method for '$METHOD_NAME' method that tests the configuration parameter '$PARAMETER_NAME'. Please generate code only, no explanations."
+PROMPT="Generate a Java unit test method for '$METHOD_NAME' method that tests the configuration parameter '$PARAMETER_NAME'. Please generate code only, no explanations. Also include edge cases and invalid parameter values that detect misconfigurations in the test generated."
 #RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer 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" -d '{"prompt": "'"$PROMPT"'", "temperature": 0.7, "max_tokens": 150}' "https://api.openai.com/v1/engines/gpt-4.0-turbo/completions")
 JSON_DATA=$(jq -n \
   --arg prompt "Generate a unit test for the method $METHOD_NAME with the configuration parameter $PARAMETER_NAME in Hadoop Common project. Ensure the code is in Java and please provide the code without any explanations or text except code." \
   --arg model "gpt-4" \
   '{
     model: $model,
-    messages: [{ "role": "system", "content": "You are a helpful assistant." }, { "role": "user", "content": $prompt }],
+    messages: [{ "role": "system", "content": "You are a Java Developer." }, { "role": "user", "content": $prompt }],
     temperature: 0,
     max_tokens: 1000
   }')
@@ -69,7 +89,10 @@ CLEANED_UNIT_TEST_CODE=$(echo "$UNIT_TEST_CODE" | sed -e 's/^```java//g' -e 's/`
 # sed -i '$ s/```$//' "$CLEANED_UNIT_TEST_CODE" # Removes the ``` at the end of the file
 
 # Write the cleaned response to the file, overwriting existing contents
-echo "$CLEANED_UNIT_TEST_CODE" > "$TEST_FILE_PATH"
+
+# Add the license header and package declaration to the beginning of the test file
+echo "$LICENSE_HEADER$CLEANED_UNIT_TEST_CODE" > "$TEST_FILE_PATH"
+#echo "$CLEANED_UNIT_TEST_CODE" > "$TEST_FILE_PATH"
 
 # Backup existing test file
 cp "$TEST_FILE_PATH" "$TEST_FILE_PATH.bak"
