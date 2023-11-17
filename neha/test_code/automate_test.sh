@@ -61,7 +61,7 @@ if [ ! -f "$TEST_FILE_PATH" ]; then
 fi
 
 # Remove backticks and the word 'java' from the beginning of the unit test code
-CLEANED_UNIT_TEST_CODE=$(echo "$UNIT_TEST_CODE" | sed 's/^```java//' | sed 's/```$//')
+CLEANED_UNIT_TEST_CODE=$(echo "$UNIT_TEST_CODE" | sed -e 's/^```java//g' -e 's/```$//g')
 
 # Check the cleaned code
 # echo "$CLEANED_UNIT_TEST_CODE"
@@ -130,14 +130,15 @@ send_to_gpt() {
 
 for ATTEMPT in {1..5}; do
     echo "Attempt $ATTEMPT"
-    BUILD_OUTPUT=$(mvn clean install -DskipTests 2>&1)
+    BUILD_OUTPUT=$(mvn clean install -B -DskipTests 2>&1)
     echo "$BUILD_OUTPUT"
 
     if echo "$BUILD_OUTPUT" | grep -q "BUILD FAILURE"; then
         echo "Build failed. Sending error to GPT..."
         echo "$BUILD_OUTPUT"
         # ERROR_MSG=$(echo "$BUILD_OUTPUT" | sed -n '/\[INFO\] BUILD FAILURE \[INFO\]/,/\[ERROR\] Re-run Maven using the -X switch to enable full debug logging./p' | sed '$d' | jq -aRs .)
-        ERROR_MSG=$(echo "$BUILD_OUTPUT" | grep -zo "\[ERROR\](.|\n)*")
+        # ERROR_MSG=$(echo "$BUILD_OUTPUT" | grep -q "\[ERROR\](.|\n)*")
+        ERROR_MSG=$(echo "$BUILD_OUTPUT" | grep -i "\[ERROR\]")
         echo "Error message: $ERROR_MSG"
         
         echo "Sending extracted error to GPT function..."
