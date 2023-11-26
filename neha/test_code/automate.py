@@ -12,16 +12,21 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 
 # Global variable to keep track of the conversation with GPT-3
 conversation_history = []
+DEBUG = False
 
 # Function to check input parameters
 def check_input_params():
     if len(sys.argv) != 3:
-        print("Usage: python script.py <parameter_name> <method_name>")
+        print("Usage: python3  script.py <parameter_name> <method_name>")
         sys.exit(1)
 
 def append_to_conversation(role, content):
     global conversation_history
     conversation_history.append({"role": role, "content": content})
+
+    # Trim the conversation history to keep the last 3 interactions
+    if len(conversation_history) > 7:
+        conversation_history = conversation_history[-3:]
 
 def write_test_code_to_file(test_file_path, test_code):
     # Define the license header and package declaration
@@ -55,13 +60,27 @@ def write_test_code_to_file(test_file_path, test_code):
 def generate_unit_test(parameter_name, method_name):
 
     # Define the system message
-    system_msg = "You are a skilled Java developer familiar with the Apache Hadoop project. Hadoop is an open-source framework that allows for the distributed processing of large data sets across clusters of computers using simple programming models. It is designed to scale up from single servers to thousands of machines, each offering local computation and storage. Hadoop's codebase is mainly in Java and adheres to Java development best practices. Your task is to generate unit tests for Java methods in the Hadoop project, ensuring the tests are comprehensive and cover various scenarios, including edge cases. The tests should follow Java coding standards and practices suitable for a large-scale, well-maintained open-source project."
+    # system_msg = "You are a skilled Java developer familiar with the Apache Hadoop project. Hadoop is an open-source framework that allows for the distributed processing of large data sets across clusters of computers using simple programming models. It is designed to scale up from single servers to thousands of machines, each offering local computation and storage. Hadoop's codebase is mainly in Java and adheres to Java development best practices. Your task is to generate unit tests for Java methods in the Hadoop project, ensuring the tests are comprehensive and cover various scenarios, including edge cases. The tests should follow Java coding standards and practices suitable for a large-scale, well-maintained open-source project."
+    system_msg = ("As a seasoned Java developer, you're tasked with creating unit tests for the "
+              "'hadoop-common' module within the Apache Hadoop project, which can be found at "
+              "https://github.com/apache/hadoop. The focus is on Configuration tests, crucial for "
+              "ensuring the robustness of the software against configuration changes, a common source "
+              "of system failures and service outages. Your unit tests should validate the software code "
+              "against various values from the 'default.xml' file, aiming to catch any misconfigurations. "
+              "Follow Java coding standards and best practices appropriate for this large-scale, "
+              "open-source project.")
 
-    # Define the user message
-    user_msg = f"Generate a unit test for the method {method_name} with the configuration parameter {parameter_name} in Hadoop Common project. Ensure the code is in Java and please provide the code without any explanations or text except code."
+    # user_msg = f"Generate a unit test for the method {method_name} with the configuration parameter {parameter_name} in Hadoop Common project. Ensure the code is in Java and please provide the code without any explanations or text except code."
+    user_msg = (f"Create Java unit tests for '{method_name}' method in the Hadoop Common project, "
+            f"especially focusing on the configuration parameter '{parameter_name}'. Include all necessary imports. "
+            "Test for all possible cases to ensure robust detection of misconfigurations. Provide the test code only, "
+            "with no additional explanations or text.")
 
     # Make sure to append system and user messages to the conversation
-    append_to_conversation("system", system_msg)
+    # Append the system message only once, at the start of the conversation
+    if not conversation_history:  # If the conversation history is empty, append the system message
+        append_to_conversation("system", system_msg)
+    
     append_to_conversation("user", user_msg)
 
     # Create a dataset using GPT
@@ -89,28 +108,30 @@ def generate_unit_test(parameter_name, method_name):
      
 # Function to send error message to GPT
 def send_to_gpt(error_msg, unit_test_code):
-    system_msg = "You are a skilled Java developer familiar with the Apache Hadoop project. Hadoop is an open-source framework that allows for the distributed processing of large data sets across clusters of computers using simple programming models. It is designed to scale up from single servers to thousands of machines, each offering local computation and storage. Hadoop's codebase is mainly in Java and adheres to Java development best practices. Your task is to generate unit tests for Java methods in the Hadoop project, ensuring the tests are comprehensive and cover various scenarios, including edge cases. The tests should follow Java coding standards and practices suitable for a large-scale, well-maintained open-source project."
-    user_msg = f"The Java unit test {unit_test_code} failed with the following error: {error_msg}. Please suggest a fix to resolve this error. Provide complete test code without any explanations or text except code."
-
-     # Append the system message only once, at the start of the conversation
-    if not conversation_history:  # If the conversation history is empty, append the system message
-        conversation_history.append(system_msg)
+    # user_msg = f"The Java unit test {unit_test_code} failed with the following error: {error_msg}. Please suggest a fix to resolve this error. Provide complete test code without any explanations or text except code."
+    user_msg = (f"The Java unit test for '{unit_test_code}' encountered a failure with this error: {error_msg}. "
+            "Please analyze the error and suggest a corrected version of the test code. The response should be "
+            "limited to the complete, fixed Java test code, explicitly excluding any explanations or supplementary text.")
 
     # Always append the latest user message
-    conversation_history.append(user_msg)
+    append_to_conversation("user", user_msg)
 
-    # Create a dataset using GPT
+    # Print conversation history before sending to API
+    # print("Sending the following conversation history to GPT-3:")
+    # for msg in conversation_history:
+    #     print(msg)
+
     response = openai.ChatCompletion.create(model="gpt-4",
-                                            messages=[
-                                                {
-                                                    "role": "system", 
-                                                    "content": system_msg
-                                                },
-                                                {
-                                                    "role": "user", 
-                                                    "content": user_msg
-                                                }]
-                                            # messages=conversation_history
+                                            # messages=[
+                                            #     {
+                                            #         "role": "system", 
+                                            #         "content": system_msg
+                                            #     },
+                                            #     {
+                                            #         "role": "user", 
+                                            #         "content": user_msg
+                                            #     }]
+                                            messages=conversation_history
                                             )
    # Check if the finish reason is 'stop' indicating complete output
     if response["choices"][0]["finish_reason"] == "stop":
@@ -147,7 +168,8 @@ def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
             return current_code  # Return the code that succeeded
         except subprocess.CalledProcessError as e:
             print("Build failed.")
-            error_msgs = re.findall(r"\[ERROR\].*", e.output)
+            # error_msgs = re.findall(r"\[ERROR\].*", e.output)
+            error_msgs = re.findall(r"\[ERROR\].*?(?=\[ERROR\] -> \[Help 1\]|$)", e.output, re.DOTALL)
             error_msg = "\n".join(error_msgs)
             # print(error_msg)
 
@@ -163,6 +185,7 @@ def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
                     print("No fix suggested, or the fix did not resolve the issue.")
                     continue  # Continue to the next iteration
 
+    print("Build failed and No working code found after multiple attempts.")
     return None  # No working code found after all attempts
 
 
