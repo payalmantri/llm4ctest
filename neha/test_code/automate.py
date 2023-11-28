@@ -16,37 +16,37 @@ DEBUG = False
 
 # Function to check input parameters
 def check_input_params():
-    if len(sys.argv) != 3:
-        print("Usage: python3  script.py <parameter_name> <method_name>")
+    if len(sys.argv) != 4:
+        print("Usage: python3  script.py <parameter_name> <method_name> <classname>")
         sys.exit(1)
 
 def append_to_conversation(role, content):
     global conversation_history
     conversation_history.append({"role": role, "content": content})
 
-    # Trim the conversation history to keep the last 3 interactions
-    if len(conversation_history) > 7:
+    # Trim the conversation history to keep only the last 3 interactions
+    if len(conversation_history) > 3:
         conversation_history = conversation_history[-3:]
 
 def write_test_code_to_file(test_file_path, test_code):
     # Define the license header and package declaration
     LICENSE_HEADER = """/**
-    * Licensed to the Apache Software Foundation (ASF) under one
-    * or more contributor license agreements.  See the NOTICE file
-    * distributed with this work for additional information
-    * regarding copyright ownership.  The ASF licenses this file
-    * to you under the Apache License, Version 2.0 (the
-    * \"License\"); you may not use this file except in compliance
-    * with the License.  You may obtain a copy of the License at
-    *
-    *     http://www.apache.org/licenses/LICENSE-2.0
-    *
-    * Unless required by applicable law or agreed to in writing, software
-    * distributed under the License is distributed on an \"AS IS\" BASIS,
-    * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    * See the License for the specific language governing permissions and
-    * limitations under the License.
-    */
+     * Licensed to the Apache Software Foundation (ASF) under one
+     * or more contributor license agreements.  See the NOTICE file
+     * distributed with this work for additional information
+     * regarding copyright ownership.  The ASF licenses this file
+     * to you under the Apache License, Version 2.0 (the
+     * \"License\"); you may not use this file except in compliance
+     * with the License.  You may obtain a copy of the License at
+     *
+     *     http://www.apache.org/licenses/LICENSE-2.0
+     *
+     * Unless required by applicable law or agreed to in writing, software
+     * distributed under the License is distributed on an \"AS IS\" BASIS,
+     * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     * See the License for the specific language governing permissions and
+     * limitations under the License.
+     */
     package org.apache.hadoop.llmgenerated;"""
 
     # Remove '```java' and '```' from the response if present
@@ -57,7 +57,7 @@ def write_test_code_to_file(test_file_path, test_code):
         test_file.write(LICENSE_HEADER + "\n\n" + test_code)    
 
 # Function to generate unit test code using OpenAI API
-def generate_unit_test(parameter_name, method_name):
+def generate_unit_test(parameter_name, method_name, classname):
 
     # Define the system message
     # system_msg = "You are a skilled Java developer familiar with the Apache Hadoop project. Hadoop is an open-source framework that allows for the distributed processing of large data sets across clusters of computers using simple programming models. It is designed to scale up from single servers to thousands of machines, each offering local computation and storage. Hadoop's codebase is mainly in Java and adheres to Java development best practices. Your task is to generate unit tests for Java methods in the Hadoop project, ensuring the tests are comprehensive and cover various scenarios, including edge cases. The tests should follow Java coding standards and practices suitable for a large-scale, well-maintained open-source project."
@@ -71,10 +71,18 @@ def generate_unit_test(parameter_name, method_name):
               "open-source project.")
 
     # user_msg = f"Generate a unit test for the method {method_name} with the configuration parameter {parameter_name} in Hadoop Common project. Ensure the code is in Java and please provide the code without any explanations or text except code."
-    user_msg = (f"Create Java unit tests for '{method_name}' method in the Hadoop Common project, "
-            f"especially focusing on the configuration parameter '{parameter_name}'. Include all necessary imports. "
-            "Test for all possible cases to ensure robust detection of misconfigurations. Provide the test code only, "
-            "with no additional explanations or text.")
+    # user_msg = (f"Create a Java unit test named '{classname}Test' for '{method_name}' method in the Hadoop Common project, "
+    #         f"especially focusing on the configuration parameter '{parameter_name}'. Include all necessary imports. "
+    #         "Test for all possible cases to ensure robust detection of misconfigurations. Provide the test code only, "
+    #         "with no additional explanations or text.")
+
+    user_msg = (f"Create a Java unit test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project, "
+            f"focusing specifically on Configuration tests. These tests are vital for assessing the software's behavior under "
+            f"different configuration values, such as the parameter '{parameter_name}'. The goal is to ensure the safety and reliability "
+            f"of configuration changes, which are often linked to system failures and service outages. "
+            "It is crucial that the response comprises only the Java test code itself, devoid of any explanations, comments, or "
+            "supplementary text. Include all necessary imports and ensure the test effectively exercises the code under varied "
+            "configurations to detect any potential misconfigurations.")
 
     # Make sure to append system and user messages to the conversation
     # Append the system message only once, at the start of the conversation
@@ -100,7 +108,12 @@ def generate_unit_test(parameter_name, method_name):
         unit_test_code = response["choices"][0]["message"]["content"]
 
         # Remove '```java' and '```' from the response if present
-        unit_test_code = unit_test_code.replace("```java", "").replace("```", "").strip()
+        # unit_test_code = unit_test_code.replace("```java", "").replace("```", "").strip()
+        # This will remove '```' followed by 'Java' (in any case) from the beginning of the string
+        unit_test_code = re.sub(r'```java\s*', '', unit_test_code, flags=re.IGNORECASE)
+
+        # This will also remove any standalone triple backticks '```' from anywhere in the string
+        unit_test_code = unit_test_code.replace("```", "")
 
         return unit_test_code
     else:
@@ -109,9 +122,10 @@ def generate_unit_test(parameter_name, method_name):
 # Function to send error message to GPT
 def send_to_gpt(error_msg, unit_test_code):
     # user_msg = f"The Java unit test {unit_test_code} failed with the following error: {error_msg}. Please suggest a fix to resolve this error. Provide complete test code without any explanations or text except code."
-    user_msg = (f"The Java unit test for '{unit_test_code}' encountered a failure with this error: {error_msg}. "
-            "Please analyze the error and suggest a corrected version of the test code. The response should be "
-            "limited to the complete, fixed Java test code, explicitly excluding any explanations or supplementary text.")
+    user_msg = (f"Please analyze the error and suggest a corrected version of the test code."
+            f"The response should strictly contain only the revised Java code for the test, without any additional text, comments, or explanations. "
+            f"Ensure the code is formatted for immediate compilation and testing."
+            f"The Java unit test for {unit_test_code} encountered a failure with this error: {error_msg}. ")
 
     # Always append the latest user message
     append_to_conversation("user", user_msg)
@@ -162,39 +176,43 @@ def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
         write_test_code_to_file(test_file_path, current_code)
 
         try:
-            result = subprocess.run(["mvn", "clean", "install", "-B", "-DskipTests"], cwd=hadoop_common_path, text=True, capture_output=True, check=True)
-            # print(result.stdout)
+            # Attempt to build
+            subprocess.run(["mvn", "clean", "install", "-B", "-DskipTests"], cwd=hadoop_common_path, text=True, capture_output=True, check=True)
             print("Build succeeded.")
-            return current_code  # Return the code that succeeded
+            return True, current_code  # Build was successful, return current code
         except subprocess.CalledProcessError as e:
             print("Build failed.")
-            # error_msgs = re.findall(r"\[ERROR\].*", e.output)
+            # Extract error messages
             error_msgs = re.findall(r"\[ERROR\].*?(?=\[ERROR\] -> \[Help 1\]|$)", e.output, re.DOTALL)
             error_msg = "\n".join(error_msgs)
-            # print(error_msg)
-
+            print(error_msg)
+            
             if "BUILD FAILURE" in e.output:
                 print("Sending extracted error to GPT...")
                 gpt_response = send_to_gpt(error_msg, current_code)
                 print("Response received from GPT:", gpt_response)
 
-                suggested_fix = gpt_response.strip()
-                if suggested_fix:
+                if gpt_response:
+                    suggested_fix = gpt_response.strip()
                     current_code = suggested_fix  # Update the current code with the suggested fix
+                    continue
                 else:
                     print("No fix suggested, or the fix did not resolve the issue.")
-                    continue  # Continue to the next iteration
 
-    print("Build failed and No working code found after multiple attempts.")
-    return None  # No working code found after all attempts
+    print("Build failed and no working code found after multiple attempts.")
+    return False, current_code  # Build failed, return the latest code
 
 
-def run_test_cases(hadoop_common_path, test_file_path, test_class, current_code):
+def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix):
+    current_code = suggested_fix
+    print("Running test cases...", test_class)
+
     for attempt in range(1, 6):
         print(f"Test Attempt {attempt}")
 
         # Write the current test code to the file before running the tests
-        write_test_code_to_file(current_code, test_file_path)
+        if attempt > 1:
+            write_test_code_to_file(current_code, test_file_path)
 
         test_command = [
             "mvn", "clean", "test", "-Pcoverage",
@@ -204,7 +222,7 @@ def run_test_cases(hadoop_common_path, test_file_path, test_class, current_code)
             result = subprocess.run(test_command, cwd=hadoop_common_path, text=True, capture_output=True, check=True)
             print(result.stdout)
             print("Test cases ran successfully.")
-            return current_code  # Return the current (working) code
+            return True  # Return the current (working) code
         except subprocess.CalledProcessError as e:
             print("Test cases failed.")
             error_msgs = re.findall(r"\[ERROR\].*", e.stderr.decode('utf-8'))  # Decode if subprocess output is in bytes
@@ -234,15 +252,17 @@ def run_test_cases(hadoop_common_path, test_file_path, test_class, current_code)
 # Main function
 def main():
     check_input_params()
-    parameter_name, method_name = sys.argv[1], sys.argv[2]
-    unit_test_code = generate_unit_test(parameter_name, method_name)
+    parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
+    unit_test_code = generate_unit_test(parameter_name, method_name, classname)
+    # print("Unit test code generated:", unit_test_code)
 
     if unit_test_code is None:
         print("No valid unit test code generated.")
         return
     
     # Extracting just the base method name from the full method signature
-    base_method_name = re.match(r"[\w]+", method_name).group()
+    # base_method_name = re.match(r"[\w]+", method_name).group()
+    base_method_name = classname
 
     hadoop_common_path = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common"
     test_file_name = f"{base_method_name}Test.java"
@@ -255,16 +275,17 @@ def main():
 
     # Attempt to build and handle errors
     os.chdir(hadoop_common_path)
-    suggested_fix = attempt_build(hadoop_common_path, test_file_path, unit_test_code)
+    build_success, suggested_fix = attempt_build(hadoop_common_path, test_file_path, unit_test_code)
 
     # Extract the class name for the test
     test_class = f"org.apache.hadoop.llmgenerated.{base_method_name}Test"
-    if suggested_fix:
-        # Replace unit test code with the suggested fix
-        write_test_code_to_file(test_file_path, suggested_fix)
+    if build_success:
+        # Run test cases since the build was successful
         test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix)
         if not test_success:
             print("Test cases did not run successfully after multiple attempts.")
+    else:
+        print("Build failed after multiple attempts, skipping test case execution.")
 
 if __name__ == "__main__":
     main()
