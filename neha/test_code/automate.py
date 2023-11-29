@@ -3,6 +3,9 @@ import re
 import sys
 import openai
 import subprocess
+import shutil
+import csv
+import itertools
 
 # Set environment variables
 openai.api_key = os.environ["OPENAI_API_KEY"]
@@ -66,7 +69,7 @@ def generate_unit_test(parameter_name, method_name, classname):
               "https://github.com/apache/hadoop. The focus is on Configuration tests, crucial for "
               "ensuring the robustness of the software against configuration changes, a common source "
               "of system failures and service outages. Your unit tests should validate the software code "
-              "against various values from the 'default.xml' file, aiming to catch any misconfigurations. "
+              "against various values from the 'core-default.xml' file, aiming to catch any misconfigurations. "
               "Follow Java coding standards and best practices appropriate for this large-scale, "
               "open-source project.")
 
@@ -78,7 +81,8 @@ def generate_unit_test(parameter_name, method_name, classname):
 
     user_msg = (f"Create a Java unit test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project, "
             f"focusing specifically on Configuration tests. These tests are vital for assessing the software's behavior under "
-            f"different configuration values, such as the parameter '{parameter_name}'. The goal is to ensure the safety and reliability "
+            f"different configuration values, such as the parameter '{parameter_name}'. Do not explicity set parameter values in test code."
+            f"Instead use conf.get to read the values. The goal is to ensure the safety and reliability "
             f"of configuration changes, which are often linked to system failures and service outages. "
             "It is crucial that the response comprises only the Java test code itself, devoid of any explanations, comments, or "
             "supplementary text. Include all necessary imports and ensure the test effectively exercises the code under varied "
@@ -202,10 +206,33 @@ def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
     print("Build failed and no working code found after multiple attempts.")
     return False, current_code  # Build failed, return the latest code
 
+def inject_values_in_config_file(config_file_path, parameter_name, parameter_value):
+    # Create a backup of the configuration file
+    backup_file_path = config_file_path + ".bak"
+    shutil.copyfile(config_file_path, backup_file_path)
+    # Read the configuration file
+    with open(config_file_path, 'r') as config_file:
+        config_file_contents = config_file.read()
+    
+    # Replace the parameter value in the configuration file
+    new_config_file_contents = re.sub(rf"<name>{parameter_name}</name>\s*<value>.*?</value>", rf"<name>{parameter_name}</name><value>{parameter_value}</value>", config_file_contents, flags=re.DOTALL)
 
-def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix):
+    # Write the updated configuration file
+    with open(config_file_path, 'w') as config_file:
+        config_file.write(new_config_file_contents)
+
+def restore_config_file(config_file_path):
+    # Restore the configuration file from the backup
+    backup_file_path = config_file_path + ".bak"
+    shutil.copyfile(backup_file_path, config_file_path)
+
+def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, property, config_file_path, goodValues, badValues):
     current_code = suggested_fix
     print("Running test cases...", test_class)
+
+    # Inject the property value in the configuration file
+    inject_values_in_config_file(config_file_path, property, goodValues)
+
 
     for attempt in range(1, 6):
         print(f"Test Attempt {attempt}")
@@ -225,9 +252,10 @@ def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix
             return True  # Return the current (working) code
         except subprocess.CalledProcessError as e:
             print("Test cases failed.")
-            error_msgs = re.findall(r"\[ERROR\].*", e.stderr.decode('utf-8'))  # Decode if subprocess output is in bytes
+            error_msgs = re.findall(r"\[ERROR\].*", e.stderr ) # Decode if subprocess output is in bytes
             error_msg = "\n".join(error_msgs)
             print(error_msg)
+
 
             # If tests have failed, send the error message to GPT for a suggested fix
             if "Tests run:" in e.stderr.decode('utf-8'):
@@ -246,13 +274,36 @@ def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix
             else:
                 print("The failure does not seem to be related to test cases.")
                 return None  # Return None to indicate no solution found
+        
+        finally:
+            # Restore the configuration file from the backup
+            restore_config_file(config_file_path)
 
     return None  # No working code found after all attempts
 
-# Main function
-def main():
-    check_input_params()
-    parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
+
+def get_property_description(config_file_path, parameter_name):
+    # Read the configuration file
+    with open(config_file_path, 'r') as config_file:
+        config_file_contents = config_file.read()
+    
+    # Extract the whole xml block for the parameter
+    xml_block = re.search(rf"<name>{parameter_name}</name>.*?</property>", config_file_contents, flags=re.DOTALL).group()
+    print(xml_block);
+
+def read_csv_and_execute(csv_file_path, config_file_path):
+    with open(csv_file_path, 'r') as csv_file:
+        csv_reader = csv.reader(csv_file)
+        next(csv_reader)  # Skip the header row
+        # Iterate over each row in the CSV file till end of file or 5 rows, whichever is earlier
+        for row in itertools.islice(csv_reader, 5):
+            parameter_name, method_name, classname, goodValues, badValues = row[0], row[1], row[2], row[3], row[4]
+            parameter_xml = get_property_description(config_file_path, parameter_name)
+            execute(parameter_xml, method_name, classname, goodValues, badValues)
+          
+ 
+# Actual function to execute the script
+def execute(parameter_name, method_name, classname, goodValues, badValues):
     unit_test_code = generate_unit_test(parameter_name, method_name, classname)
     # print("Unit test code generated:", unit_test_code)
 
@@ -264,9 +315,10 @@ def main():
     # base_method_name = re.match(r"[\w]+", method_name).group()
     base_method_name = classname
 
-    hadoop_common_path = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common"
+    hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
     test_file_name = f"{base_method_name}Test.java"
     test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
+    config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
 
     # Ensure the test file directory exists
     os.makedirs(os.path.dirname(test_file_path), exist_ok=True)
@@ -281,11 +333,40 @@ def main():
     test_class = f"org.apache.hadoop.llmgenerated.{base_method_name}Test"
     if build_success:
         # Run test cases since the build was successful
-        test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix)
+        test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_name, config_file, goodValues, badValues)
         if not test_success:
             print("Test cases did not run successfully after multiple attempts.")
     else:
         print("Build failed after multiple attempts, skipping test case execution.")
+
+# Main function
+def main1():
+    check_input_params()
+
+    parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
+    base_method_name = classname
+    hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
+    test_file_name = f"{base_method_name}Test.java"
+    test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
+    config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
+    execute(parameter_name, method_name, classname)
+
+
+def main():
+    # check_input_params()
+
+    # parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
+    # base_method_name = classname
+    hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
+    # test_file_name = f"{base_method_name}Test.java"
+    # test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
+    config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
+    csv_file_path = "parameter-configurations.csv"
+
+    # restore_config_file(config_file)
+
+
+    read_csv_and_execute(csv_file_path, config_file)
 
 if __name__ == "__main__":
     main()
