@@ -1,0 +1,3 @@
+﻿Parameter Name ,Public Method,Class Name,Good Values,Bad Values
+fs.ftp.data.connection.mode,"public FSDataInputStream open(Path file, int bufferSize) throws IOException",,ACTIVE_LOCAL_DATA_CONNECTION_MODE,ACTIVE_DATA_CONNECTION_MODE
+hadoop.security.dns.log-slow-lookups.threshold.ms,public static InetAddress getByName(String hostname) throws UnknownHostException,,1000,1.08829E+16
