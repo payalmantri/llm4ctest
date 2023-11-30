@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import os
 import re
 import sys
@@ -140,15 +141,6 @@ def send_to_gpt(error_msg, unit_test_code):
     #     print(msg)
 
     response = openai.ChatCompletion.create(model="gpt-4",
-                                            # messages=[
-                                            #     {
-                                            #         "role": "system", 
-                                            #         "content": system_msg
-                                            #     },
-                                            #     {
-                                            #         "role": "user", 
-                                            #         "content": user_msg
-                                            #     }]
                                             messages=conversation_history
                                             )
    # Check if the finish reason is 'stop' indicating complete output
@@ -188,6 +180,9 @@ def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
             print("Build failed.")
             # Extract error messages
             error_msgs = re.findall(r"\[ERROR\].*?(?=\[ERROR\] -> \[Help 1\]|$)", e.output, re.DOTALL)
+            
+            # Remove duplicates while preserving order
+            error_msgs = list(OrderedDict.fromkeys(error_msgs))
             error_msg = "\n".join(error_msgs)
             print(error_msg)
             
@@ -233,51 +228,36 @@ def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix
     # Inject the property value in the configuration file
     inject_values_in_config_file(config_file_path, property, goodValues)
 
+    test_command = [
+        "mvn", "-B", "clean", "test", "-Pcoverage",
+        f"-Dtest={test_class}", "jacoco:report"
+    ]
+    try:
+        result = subprocess.run(test_command, cwd=hadoop_common_path, text=True, capture_output=True, check=True)
+        print(result.stdout)
+        test_output = result.stdout
 
-    for attempt in range(1, 6):
-        print(f"Test Attempt {attempt}")
+        # Checking the test results in the output
+        info_tests_run = re.findall(r"\[INFO\]\s+Tests run:.*", result.stdout, re.MULTILINE)
+        error_tests_run = re.findall(r"\[ERROR\]\s+Tests run:.*", result.stdout, re.MULTILINE)
 
-        # Write the current test code to the file before running the tests
-        if attempt > 1:
-            write_test_code_to_file(current_code, test_file_path)
+        print("Info tests run:", info_tests_run)
+        print("Error tests run:", error_tests_run)
 
-        test_command = [
-            "mvn", "clean", "test", "-Pcoverage",
-            f"-Dtest={test_class}", "jacoco:report"
-        ]
-        try:
-            result = subprocess.run(test_command, cwd=hadoop_common_path, text=True, capture_output=True, check=True)
-            print(result.stdout)
-            print("Test cases ran successfully.")
-            return True  # Return the current (working) code
-        except subprocess.CalledProcessError as e:
+        failure_pattern = re.compile(r"\[ERROR\] There are test failures\.")
+        if failure_pattern.search(result.stdout):
             print("Test cases failed.")
-            error_msgs = re.findall(r"\[ERROR\].*", e.stderr ) # Decode if subprocess output is in bytes
-            error_msg = "\n".join(error_msgs)
-            print(error_msg)
-
-
-            # If tests have failed, send the error message to GPT for a suggested fix
-            if "Tests run:" in e.stderr.decode('utf-8'):
-                print("Sending extracted error to GPT...")
-                gpt_response = send_to_gpt(error_msg, current_code)
-                print("Response received from GPT:", gpt_response)
-
-                suggested_fix = gpt_response.strip()
-                if suggested_fix:
-                    print("Suggested fix:")
-                    print(suggested_fix)
-                    current_code = suggested_fix  # Update current_code with the suggested fix
-                else:
-                    print("No fix suggested, or the fix did not resolve the issue.")
-                    continue  # Continue to the next iteration
-            else:
-                print("The failure does not seem to be related to test cases.")
-                return None  # Return None to indicate no solution found
-        
-        finally:
-            # Restore the configuration file from the backup
-            restore_config_file(config_file_path)
+            return False  # Return None to indicate no solution found
+        elif info_tests_run:
+            print("Test cases ran successfully.")
+            return True  # Return True to indicate success
+    except subprocess.CalledProcessError as e:
+        print("Test cases failed.")
+        return False  # Return None to indicate no solution found
+    
+    finally:
+        # Restore the configuration file from the backup
+        restore_config_file(config_file_path)
 
     return None  # No working code found after all attempts
 
@@ -318,6 +298,7 @@ def execute(parameter_name, method_name, classname, goodValues, badValues):
     hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
     test_file_name = f"{base_method_name}Test.java"
     test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
+    test_class = f"org.apache.hadoop.llmgenerated.{base_method_name}Test"
     config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
 
     # Ensure the test file directory exists
@@ -329,8 +310,7 @@ def execute(parameter_name, method_name, classname, goodValues, badValues):
     os.chdir(hadoop_common_path)
     build_success, suggested_fix = attempt_build(hadoop_common_path, test_file_path, unit_test_code)
 
-    # Extract the class name for the test
-    test_class = f"org.apache.hadoop.llmgenerated.{base_method_name}Test"
+    
     if build_success:
         # Run test cases since the build was successful
         test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_name, config_file, goodValues, badValues)
