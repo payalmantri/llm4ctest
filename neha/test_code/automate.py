@@ -21,7 +21,7 @@ DEBUG = False
 # Function to check input parameters
 def check_input_params():
     if len(sys.argv) != 4:
-        print("Usage: python3  script.py <parameter_name> <method_name> <classname>")
+        print("Usage: python3 script.py <parameter_name> <method_name> <classname>")
         sys.exit(1)
 
 def append_to_conversation(role, content):
@@ -58,7 +58,21 @@ def write_test_code_to_file(test_file_path, test_code):
     
     # Write unit test code to the file
     with open(test_file_path, 'w') as test_file:
-        test_file.write(LICENSE_HEADER + "\n\n" + test_code)    
+        test_file.write(LICENSE_HEADER + "\n\n" + test_code)   
+
+def extract_test_code(test_file_path):
+    with open(test_file_path, 'r') as file:
+        content = file.read()
+
+    # Match everything from the first import statement onwards
+    match = re.search(r'(import .*?;\s*.*)', content, re.DOTALL)
+
+    if match:
+        unit_test_code = match.group(1)
+        return unit_test_code
+    else:
+        print("No import statement found in the test file.")
+        return None 
 
 # Function to generate unit test code using OpenAI API
 def generate_unit_test(parameter_name, method_name, classname):
@@ -80,14 +94,7 @@ def generate_unit_test(parameter_name, method_name, classname):
     #         "Test for all possible cases to ensure robust detection of misconfigurations. Provide the test code only, "
     #         "with no additional explanations or text.")
 
-    user_msg = (f"Create a Java unit test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project, "
-            f"focusing specifically on Configuration tests. These tests are vital for assessing the software's behavior under "
-            f"different configuration values, such as the parameter '{parameter_name}'. Do not explicity set parameter values in test code."
-            f"Instead use conf.get to read the values. The goal is to ensure the safety and reliability "
-            f"of configuration changes, which are often linked to system failures and service outages. "
-            "It is crucial that the response comprises only the Java test code itself, devoid of any explanations, comments, or "
-            "supplementary text. Include all necessary imports and ensure the test effectively exercises the code under varied "
-            "configurations to detect any potential misconfigurations.")
+    user_msg = "It is crucial that the response comprises only the Java test code itself, devoid of any explanations, comments, or text. Create a Java Configuration test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project. These tests are vital for assessing the software's behavior under different configuration values, such as the parameter '{parameter_name}'. Include all necessary imports and ensure the test effectively exercises the code under varied configurations to detect any potential misconfigurations. Do not explicitly set parameter values in the test code. Instead, use 'conf.get' to read the values.\n\nHere's a guide example for the fs.DefaultFS parameter in FileSystemTest:\n\nimport org.apache.hadoop.conf.Configuration;\nimport org.apache.hadoop.fs.FileSystem;\nimport org.junit.Assert;\nimport org.junit.Before;\nimport org.junit.Test;\nimport java.net.URI;\n\npublic class FileSystemTest {\n\n    private Configuration conf;\n\n    @Before\n    public void setUp() {\n        conf = new Configuration();\n   }\n\n    @Test\n    public void testDefaultFSConfiguration() {\n        URI defaultUri = FileSystem.getDefaultUri(conf);\n        Assert.assertEquals(URI.create(conf.get(FileSystem.FS_DEFAULT_NAME_KEY)), defaultUri);\n    }\n}\n\nGenerate tests similar to this structure, with code only."
 
     # Make sure to append system and user messages to the conversation
     # Append the system message only once, at the start of the conversation
@@ -162,14 +169,15 @@ def send_to_gpt(error_msg, unit_test_code):
         return None
     
 # Function to handle build attempts
-def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
-    current_code = unit_test_code
+def attempt_build(hadoop_common_path, test_file_path):
+    current_code = extract_test_code(test_file_path)
 
     for attempt in range(1, 6):
         print(f"Attempt {attempt}")
 
         # Write the current unit test code to the file
-        write_test_code_to_file(test_file_path, current_code)
+        if attempt > 1:
+            write_test_code_to_file(test_file_path, current_code)
 
         try:
             # Attempt to build
@@ -179,11 +187,17 @@ def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
         except subprocess.CalledProcessError as e:
             print("Build failed.")
             # Extract error messages
-            error_msgs = re.findall(r"\[ERROR\].*?(?=\[ERROR\] -> \[Help 1\]|$)", e.output, re.DOTALL)
+            # error_msgs = re.findall(r"\[ERROR\].*?(?=\[ERROR\] -> \[Help 1\]|$)", e.output, re.DOTALL)
             
             # Remove duplicates while preserving order
-            error_msgs = list(OrderedDict.fromkeys(error_msgs))
-            error_msg = "\n".join(error_msgs)
+            # error_msgs = list(OrderedDict.fromkeys(error_msgs))
+            # error_msg = "\n".join(error_msgs)
+
+            # error_lines = re.findall(r"\[ERROR\].*?(?=\n|$)", e.output)
+            error_lines = re.findall(r"\[ERROR\].*?(?=-> \[Help 1\]|\n|$)", e.output)
+            error_lines = list(dict.fromkeys(error_lines))
+            error_msg = "\n".join(error_lines)
+
             print(error_msg)
             
             if "BUILD FAILURE" in e.output:
@@ -203,8 +217,18 @@ def attempt_build(hadoop_common_path, test_file_path, unit_test_code):
 
 def inject_values_in_config_file(config_file_path, parameter_name, parameter_value):
     # Create a backup of the configuration file
-    backup_file_path = config_file_path + ".bak"
-    shutil.copyfile(config_file_path, backup_file_path)
+    backup_file_path = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common/src/test/java/org/apache/hadoop/llmgenerated" + "core-default.xml.bak"
+    # Check if the config file exists
+    if not os.path.isfile(config_file_path):
+        print(f"Config file {config_file_path} does not exist.")
+        return
+
+    # Create a backup
+    try:
+        shutil.copyfile(config_file_path, backup_file_path)
+    except Exception as e:
+        print(f"Failed to create backup file {backup_file_path}. Error: {e}")
+        return
     # Read the configuration file
     with open(config_file_path, 'r') as config_file:
         config_file_contents = config_file.read()
@@ -218,7 +242,7 @@ def inject_values_in_config_file(config_file_path, parameter_name, parameter_val
 
 def restore_config_file(config_file_path):
     # Restore the configuration file from the backup
-    backup_file_path = config_file_path + ".bak"
+    backup_file_path = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common/src/test/java/org/apache/hadoop/llmgenerated" + "core-default.xml.bak"
     shutil.copyfile(backup_file_path, config_file_path)
 
 def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, property, config_file_path, goodValues, badValues):
@@ -269,14 +293,14 @@ def get_property_description(config_file_path, parameter_name):
     
     # Extract the whole xml block for the parameter
     xml_block = re.search(rf"<name>{parameter_name}</name>.*?</property>", config_file_contents, flags=re.DOTALL).group()
-    print(xml_block);
+    print(xml_block)
 
-def read_csv_and_execute(csv_file_path, config_file_path):
-    with open(csv_file_path, 'r') as csv_file:
-        csv_reader = csv.reader(csv_file)
-        next(csv_reader)  # Skip the header row
+def read_tsv_and_execute(tsv_file_path, config_file_path):
+    with open(tsv_file_path, 'r') as tsv_file:
+        tsv_reader = csv.reader(tsv_file, delimiter='\t')
+        next(tsv_reader)  # Skip the header row
         # Iterate over each row in the CSV file till end of file or 5 rows, whichever is earlier
-        for row in itertools.islice(csv_reader, 5):
+        for row in itertools.islice(tsv_reader, 5):
             parameter_name, method_name, classname, goodValues, badValues = row[0], row[1], row[2], row[3], row[4]
             parameter_xml = get_property_description(config_file_path, parameter_name)
             execute(parameter_xml, method_name, classname, goodValues, badValues)
@@ -284,33 +308,34 @@ def read_csv_and_execute(csv_file_path, config_file_path):
  
 # Actual function to execute the script
 def execute(parameter_name, method_name, classname, goodValues, badValues):
-    unit_test_code = generate_unit_test(parameter_name, method_name, classname)
-    # print("Unit test code generated:", unit_test_code)
-
-    if unit_test_code is None:
-        print("No valid unit test code generated.")
-        return
     
-    # Extracting just the base method name from the full method signature
-    # base_method_name = re.match(r"[\w]+", method_name).group()
     base_method_name = classname
 
-    hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
+    hadoop_common_path = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common"
     test_file_name = f"{base_method_name}Test.java"
     test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
     test_class = f"org.apache.hadoop.llmgenerated.{base_method_name}Test"
-    config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
+    config_file = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
 
     # Ensure the test file directory exists
     os.makedirs(os.path.dirname(test_file_path), exist_ok=True)
 
-    write_test_code_to_file(test_file_path, unit_test_code)
+    if not os.path.isfile(test_file_path):
+        ctest_code = generate_unit_test(parameter_name, method_name, classname)
+
+        if ctest_code is None:
+            print("No valid unit test code generated.")
+            return
+        else:
+            # print("Unit test code generated:", ctest_code)
+            write_test_code_to_file(test_file_path, ctest_code)
+    else:
+        print("Test file already exists. Proceeding to Compile.")
 
     # Attempt to build and handle errors
     os.chdir(hadoop_common_path)
-    build_success, suggested_fix = attempt_build(hadoop_common_path, test_file_path, unit_test_code)
-
-    
+    build_success, suggested_fix = attempt_build(hadoop_common_path, test_file_path)
+ 
     if build_success:
         # Run test cases since the build was successful
         test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_name, config_file, goodValues, badValues)
@@ -325,28 +350,20 @@ def main1():
 
     parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
     base_method_name = classname
-    hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
+    hadoop_common_path = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common"
     test_file_name = f"{base_method_name}Test.java"
     test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
-    config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
+    config_file = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
     execute(parameter_name, method_name, classname)
 
 
 def main():
-    # check_input_params()
 
-    # parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
-    # base_method_name = classname
-    hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
-    # test_file_name = f"{base_method_name}Test.java"
-    # test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
-    config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
-    csv_file_path = "parameter-configurations.csv"
+    hadoop_common_path = "/home/nvadde2/hadoop/hadoop-common-project/hadoop-common"
+    config_file = os.path.join(hadoop_common_path, "/target/classes/core-default.xml")
+    tsv_file_path = os.path.join(hadoop_common_path, "/src/test/java/org/apache/hadoop/llmgenerated/parameter-configurations.tsv")
 
-    # restore_config_file(config_file)
-
-
-    read_csv_and_execute(csv_file_path, config_file)
+    read_tsv_and_execute(tsv_file_path, config_file)
 
 if __name__ == "__main__":
     main()
