@@ -1,0 +1,4 @@
+﻿Parameter Name  Public Method   Class Name  Good Values Bad Values  
+file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	512	GOOD
+file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	-1	BAD
+file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	123455499887658	BAD
