@@ -11,3 +11,5 @@ hadoop-common	io.bytes.per.checksum	public FsServerDefaults getServerDefaults() 
 hadoop-common	io.bytes.per.checksum	public FsServerDefaults getServerDefaults() throws IOException	FileSystem	-1	BAD
 hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	SAME_FILESYSTEM_ACROSS_MOUNTPOINT	GOOD
 hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	RANDOM	BAD
+adoop-common	ipc.ping.interval	 public static final int getPingInterval(Configuration conf)	org.apache.hadoop.ipc.Client	Client	60000	GOOD			
+hadoop-common	ipc.ping.interval	 public static final int getPingInterval(Configuration conf)	org.apache.hadoop.ipc.Client	Client	-60000	BAD			
