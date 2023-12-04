@@ -1,0 +1,13 @@
+﻿MODULE	CONFIG_PARAMETER	METHOD	CLASS	TEST_NAME	VALUE	TYPE(GOOD|BAD)
+hadoop-common	file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	512	GOOD
+hadoop-common	file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	-1	BAD
+hadoop-common	file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	123455499887658	BAD
+hadoop-common	hadoop.security.auth_to_local.mechanism	public static void setRuleMechanism(String ruleMech)	KerberosName	mit	GOOD	
+hadoop-common	hadoop.security.auth_to_local.mechanism	public static void setRuleMechanism(String ruleMech)	KerberosName	randome	BAD
+hadoop-common	hadoop.security.authorization	public static boolean isInstrumentationAccessAllowed(ServletContext servletContext, HttpServletRequest request,HttpServletResponse response) throws IOException	HttpServer2	HttpServer2	true	GOOD
+hadoop-common	hadoop.security.authorization	public static boolean isInstrumentationAccessAllowed(ServletContext servletContext, HttpServletRequest request,HttpServletResponse response) throws IOException	HttpServer2	HttpServer2	123	BAD
+hadoop-common	io.bytes.per.checksum	public FsServerDefaults getServerDefaults() throws IOException	FileSystem	180	GOOD
+hadoop-common	io.bytes.per.checksum	public FsServerDefaults getServerDefaults() throws IOException	FileSystem	0.5	BAD
+hadoop-common	io.bytes.per.checksum	public FsServerDefaults getServerDefaults() throws IOException	FileSystem	-1	BAD
+hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	SAME_FILESYSTEM_ACROSS_MOUNTPOINT	GOOD
+hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	RANDOM	BAD

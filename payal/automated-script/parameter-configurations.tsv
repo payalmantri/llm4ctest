@@ -1,4 +1,3 @@
-﻿Parameter Name  Public Method   Class Name  Good Values Bad Values  
-file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	512	GOOD
-file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	-1	BAD
-file.bytes-per-checksum	public ChecksumFSInputChecker(ChecksumFileSystem fs, Path file)	ChecksumFileSystem	ChecksumFileSystem	123455499887658	BAD
+﻿MODULE	CONFIG_PARAMETER	METHOD	CLASS	TEST_NAME	VALUE	TYPE(GOOD|BAD)
+hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	SAME_FILESYSTEM_ACROSS_MOUNTPOINT	GOOD
+hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	RANDOM	BAD

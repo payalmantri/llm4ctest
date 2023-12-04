@@ -75,12 +75,12 @@ def extract_test_code(test_file_path):
         return None 
 
 # Function to generate unit test code using OpenAI API
-def generate_unit_test(parameter_name, method_name, classname):
+def generate_unit_test(parameter_xml, module, method, classname, testname):
 
     # Define the system message
     # system_msg = "You are a skilled Java developer familiar with the Apache Hadoop project. Hadoop is an open-source framework that allows for the distributed processing of large data sets across clusters of computers using simple programming models. It is designed to scale up from single servers to thousands of machines, each offering local computation and storage. Hadoop's codebase is mainly in Java and adheres to Java development best practices. Your task is to generate unit tests for Java methods in the Hadoop project, ensuring the tests are comprehensive and cover various scenarios, including edge cases. The tests should follow Java coding standards and practices suitable for a large-scale, well-maintained open-source project."
     system_msg = ("As a seasoned Java developer, you're tasked with creating unit tests for the "
-              "'hadoop-common' module within the Apache Hadoop project, which can be found at "
+              "'{module}' module within the Apache Hadoop project, which can be found at "
               "https://github.com/apache/hadoop. The focus is on Configuration tests, crucial for "
               "ensuring the robustness of the software against configuration changes, a common source "
               "of system failures and service outages. Your unit tests should validate the software code "
@@ -94,22 +94,28 @@ def generate_unit_test(parameter_name, method_name, classname):
     #         "Test for all possible cases to ensure robust detection of misconfigurations. Provide the test code only, "
     #         "with no additional explanations or text.")
 
-    user_msg = (f"Create a Java unit test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project, "
-            f"focusing specifically on Configuration tests. These tests are vital for assessing the software's behavior under "
-            f"different configuration values, such as the parameter '{parameter_name}'."
-            f"The goal is to ensure the safety and reliability "
-            f"of configuration changes, which are often linked to system failures and service outages. "
-            "It is crucial that the response comprises only the Java test code itself, devoid of any explanations, comments, or text."
-            f"Create a Java Configuration test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project. "
-            f"These tests are vital for assessing the software's behavior under different configuration values, such as the parameter '{parameter_name}'. " 
-            f"Include all necessary imports and ensure the test effectively exercises the code under varied configurations to detect any potential misconfigurations."
-            f"Do not explicitly set parameter values in the test code. Instead, use 'conf.get' to read the values."
-            "Here's a guide example for the fs.DefaultFS parameter in FileSystemTest: import org.apache.hadoop.conf.Configuration; import org.apache.hadoop.fs.FileSystem; import org.junit.Assert; import org.junit.Before; import org.junit.Test; import java.net.URI; "
+    # user_msg = (f"It is crucial that the response comprises only the Java test code itself, devoid of any explanations, comments, or text.Create a Java unit test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project, "
+    #         f"focusing specifically on Configuration tests. These tests are vital for assessing the software's behavior under "
+    #         f"different configuration values, for the parameter'{parameter_name}'."
+    #         f"The goal is to ensure the safety and reliability "
+    #         f"of configuration changes, which are often linked to system failures and service outages. "
+    #         f"Create a Java Configuration test named '{classname}Test' for the method '{method_name}' in the Hadoop Common project. "
+    #         f"These tests are vital for assessing the software's behavior under different configuration values, such as the parameter '{parameter_name}'. " 
+    #         f"Include all necessary imports and ensure the test effectively exercises the code under varied configurations to detect any potential misconfigurations."
+    #         f"Do not explicitly set parameter values in the test code. Instead, use 'conf.get' to read the values."
+    #         "Here's a guide example for the fs.DefaultFS parameter in FileSystemTest: import org.apache.hadoop.conf.Configuration; import org.apache.hadoop.fs.FileSystem; import org.junit.Assert; import org.junit.Before; import org.junit.Test; import java.net.URI; "
+    #         "public class FileSystemTest { private Configuration conf; @Before public void setUp() { conf = new Configuration(); conf.addResource(\"core-default.xml\"); } @Test public void testDefaultFSConfiguration() { URI defaultUri = FileSystem.getDefaultUri(conf);"
+    #         "Assert.assertEquals(URI.create(conf.get(FileSystem.FS_DEFAULT_NAME_KEY)), defaultUri); } }. "
+    #         f"Generate tests similar to this structure, with code only." 
+    #         )
+    user_msg = (f"It is crucial that the response comprises only the Java test code itself, devoid of any explanations, comments, or text. "
+                f"Create a Java Configuration test named '{classname}Test' for the method '{method}' in the Hadoop Common project."
+                 f"This test is crucial for assessing how the software behaves with different values of the '{parameter_xml}' configuration parameter. "
+                  f"Include all necessary imports and ensure the test effectively exercises the code under varied configurations to detect any potential misconfigurations."
+                  f" Do not explicitly set parameter values in the test code. Instead, use 'conf.get' to read the values."
+               f"Here's a guide example for the fs.DefaultFS parameter in FileSystemTest: import org.apache.hadoop.conf.Configuration; import org.apache.hadoop.fs.FileSystem; import org.junit.Assert; import org.junit.Before; import org.junit.Test; import java.net.URI; "
             "public class FileSystemTest { private Configuration conf; @Before public void setUp() { conf = new Configuration(); conf.addResource(\"core-default.xml\"); } @Test public void testDefaultFSConfiguration() { URI defaultUri = FileSystem.getDefaultUri(conf);"
-            "Assert.assertEquals(URI.create(conf.get(FileSystem.FS_DEFAULT_NAME_KEY)), defaultUri); } }. "
-            f"Generate tests similar to this structure, with code only." 
-            )
-
+            "Assert.assertEquals(URI.create(conf.get(FileSystem.FS_DEFAULT_NAME_KEY)), defaultUri); } }. ")
 
     # Make sure to append system and user messages to the conversation
     # Append the system message only once, at the start of the conversation
@@ -260,12 +266,12 @@ def restore_config_file(config_file_path):
     backup_file_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/src/test/java/org/apache/hadoop/llmgenerated/core-default.xml.bak"
     shutil.copyfile(backup_file_path, config_file_path)
 
-def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, property, config_file_path, goodValues, badValues):
+def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, property, config_file_path, value, type):
     current_code = suggested_fix
     print("Running test cases...", test_class)
 
     # Inject the property value in the configuration file
-    inject_values_in_config_file(hadoop_common_path, config_file_path, property, goodValues)
+    inject_values_in_config_file(hadoop_common_path, config_file_path, property, value)
 
     test_command = [
         "mvn", "-B", "clean", "test", "-Pcoverage",
@@ -317,34 +323,32 @@ def read_csv_and_execute(csv_file_path, config_file_path):
         next(csv_reader)  # Skip the header row
         # Iterate over each row in the CSV file till end of file or 5 rows, whichever is earlier
         for row in itertools.islice(csv_reader, 5):
-            print(row)
-            parameter_name, method_name, classname, goodValues, badValues = row[0], row[1], row[2], row[3], row[4]
+            module, parameter_name, method, classname, testname, value, type = row[0], row[1], row[2], row[3], row[4], row[5], row[6]
             # print(parameter_name, method_name, classname, goodValues, badValues)
             parameter_xml = get_property_description(config_file_path, parameter_name)
             # print(parameter_xml)
-            execute(parameter_xml, method_name, classname, goodValues, badValues)
+            execute(parameter_xml, module, method, classname, testname, value, type)
           
  
 # Actual function to execute the script
-def execute(parameter_name, method_name, classname, goodValues, badValues):
+def execute(parameter_xml, module, method, classname, testname, value, type):
     
     # Extracting just the base method name from the full method signature
     # base_method_name = re.match(r"[\w]+", method_name).group()
-    base_method_name = classname
-    print("Base method name:", base_method_name)
+   
 
     hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
-    test_file_name = f"{base_method_name}Test.java"
+    test_file_name = f"{testname}Test.java"
 
     test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
-    test_class = f"org.apache.hadoop.llmgenerated.{base_method_name}Test"
+    test_class = f"org.apache.hadoop.llmgenerated.{testname}Test"
     config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
 
     # Ensure the test file directory exists
     os.makedirs(os.path.dirname(test_file_path), exist_ok=True)
 
     if not os.path.isfile(test_file_path):
-        ctest_code = generate_unit_test(parameter_name, method_name, classname)
+        ctest_code = generate_unit_test(parameter_xml, module, method, classname, testname)
 
         if ctest_code is None:
             print("No valid unit test code generated.")
@@ -362,7 +366,7 @@ def execute(parameter_name, method_name, classname, goodValues, badValues):
     
     if build_success:
         # Run test cases since the build was successful
-        test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_name, config_file, goodValues, badValues)
+        test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_xml, config_file, value, type)
         if not test_success:
             restore_config_file(config_file)
             print("Test cases did not run successfully after multiple attempts.")
