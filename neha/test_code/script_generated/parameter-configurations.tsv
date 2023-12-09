@@ -1,1 +1,2 @@
 MODULE	CONFIG_PARAMETER	METHOD	CLASS	TEST_NAME	VALUE	TYPE(GOOD|BAD)
+hadoop-common	ha.failover-controller.new-active.rpc-timeout.ms	FailoverController(Configuration conf, HAServiceTarget target)	org.apache.hadoop.ha.FailoverController	FailoverController	-8	BAD
