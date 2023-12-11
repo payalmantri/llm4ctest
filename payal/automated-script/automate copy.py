@@ -262,6 +262,8 @@ def inject_values_in_config_file(hadoop_common_path, config_file_path, parameter
         config_file.write(new_config_file_contents)
 
 def restore_config_file(config_file_path):
+    # config_file_path = os.path.join(hadoop_common_path, "target/classes/core-default.xml")
+    print("Restoring the configuration file from the backup...", config_file_path)
     # Restore the configuration file from the backup
     backup_file_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/src/test/java/org/apache/hadoop/llmgenerated/core-default.xml.bak"
     shutil.copyfile(backup_file_path, config_file_path)
@@ -274,8 +276,8 @@ def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix
     inject_values_in_config_file(hadoop_common_path, config_file_path, property, value)
 
     test_command = [
-        "mvn", "-B", "clean", "test", "-Pcoverage",
-        f"-Dtest={test_class}", "jacoco:report"
+        "mvn", "-B", 
+        f"-Dtest={test_class}", "surefire:test"
     ]
     try:
         result = subprocess.run(test_command, cwd=hadoop_common_path, text=True, capture_output=True, check=True)
@@ -292,19 +294,64 @@ def run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix
         failure_pattern = re.compile(r"\[ERROR\] There are test failures\.")
         if failure_pattern.search(result.stdout):
             print("Test cases failed.")
-            return False  # Return None to indicate no solution found
+            error_lines = re.findall(r"\[ERROR\].*?(?=\n|$)", result.stdout)
+            error_lines = list(dict.fromkeys(error_lines))
+            error_msg = "\n".join(error_lines)
+    
+            return False, error_msg  # Return None to indicate no solution found
         elif info_tests_run:
             print("Test cases ran successfully.")
-            return True  # Return True to indicate success
+            return True, None  # Return True to indicate success
     except subprocess.CalledProcessError as e:
         print("Test cases failed.")
-        return False  # Return None to indicate no solution found
+        error_lines = re.findall(r"\[ERROR\].*?(?=\n|$)", result.stdout)
+        error_lines = list(dict.fromkeys(error_lines))
+        error_msg = "\n".join(error_lines)
+
+        return False, error_msg  # Return None to indicate no solution found
     
     finally:
         # Restore the configuration file from the backup
         restore_config_file(config_file_path)
 
     return None  # No working code found after all attempts
+
+def execute_tests(hadoop_common_path, config_file, test_file_path, test_class, suggested_fix, parameter_xml, value, type):
+    for attempt in range(1, 6):
+        print(f"Test Attempt {attempt}")
+        test_success, error_msg = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_xml,config_file, value, type)
+        if type == "GOOD":
+            if test_success:
+                print("Test case passed successfully.")
+                break
+            else:
+                print(f"Test case failed on attempt {attempt + 1}. Retrying...")
+                # Logic for sending error to GPT, applying fixes, and retrying build if necessary
+                print("Sending extracted error to GPT...")
+                gpt_response = send_to_gpt(error_msg, suggested_fix)
+                print("Response received from GPT:", gpt_response)
+
+                write_test_code_to_file(test_file_path, gpt_response)
+
+                build_success, suggested_fix = attempt_build(hadoop_common_path, test_file_path)
+                if build_success:
+                    continue
+                else:
+                    print("Build failed after multiple attempts, skipping test case execution.")
+                    break
+
+        elif type == "BAD":
+            if test_success:
+                print("Test case unexpectedly passed for a bad configuration value.")
+                return True
+            else:
+                print(f"Test case failed on attempt {attempt + 1}. Retrying...")
+            test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_xml, value, type)
+            print(f"Test case {'passed' if test_success else 'failed'} on attempt {attempt + 1}. Recorded as type 'bad'.")
+            return test_success
+    print("Maximum test retries reached.")
+    return False
+
 
 
 def get_property_description(config_file_path, parameter_name):
@@ -315,6 +362,7 @@ def get_property_description(config_file_path, parameter_name):
     # Extract the whole xml block for the parameter
     xml_block = re.search(rf"<name>{parameter_name}</name>.*?</property>", config_file_contents, flags=re.DOTALL).group()
     print(xml_block)
+    return xml_block
 
 def read_csv_and_execute(csv_file_path, config_file_path):
     with open(csv_file_path, 'r') as csv_file:
@@ -366,10 +414,7 @@ def execute(parameter_xml, module, method, classname, testname, value, type):
     
     if build_success:
         # Run test cases since the build was successful
-        test_success = run_test_cases(hadoop_common_path, test_file_path, test_class, suggested_fix, parameter_xml, config_file, value, type)
-        if not test_success:
-            restore_config_file(config_file)
-            print("Test cases did not run successfully after multiple attempts.")
+         execute_tests(hadoop_common_path, config_file, test_file_path, test_class, suggested_fix, parameter_xml, value, type)
     else:
         restore_config_file(config_file)
         print("Build failed after multiple attempts, skipping test case execution.")
@@ -388,20 +433,23 @@ def main1():
 
 
 def main():
-    # check_input_params()
+    try: 
+        # check_input_params()
 
-    # parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
-    # base_method_name = classname
-    hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
-    # test_file_name = f"{base_method_name}Test.java"
-    # test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
-    config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
-    csv_file_path = "parameter-configurations.tsv"
+        # parameter_name, method_name, classname = sys.argv[1], sys.argv[2], sys.argv[3]
+        # base_method_name = classname
+        hadoop_common_path = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common"
+        # test_file_name = f"{base_method_name}Test.java"
+        # test_file_path = os.path.join(hadoop_common_path, "src/test/java/org/apache/hadoop/llmgenerated", test_file_name)
+        config_file = "/Users/payalmantri/Desktop/practice/cs527/hadoop/hadoop-common-project/hadoop-common/target/classes/core-default.xml"
+        csv_file_path = "parameter-configurations.tsv"
 
-    # restore_config_file(config_file)
+        # restore_config_file(config_file)
 
 
-    read_csv_and_execute(csv_file_path, config_file)
+        read_csv_and_execute(csv_file_path, config_file)
+    finally:
+        restore_config_file(config_file)
 
 if __name__ == "__main__":
     main()
