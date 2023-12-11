@@ -12,4 +12,9 @@ hadoop-common	io.bytes.per.checksum	public FsServerDefaults getServerDefaults() 
 hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	SAME_FILESYSTEM_ACROSS_MOUNTPOINT	GOOD
 hadoop-common	fs.viewfs.rename.strategy	public boolean rename(final Path src, final Path dst) throws IOException	ViewFileSystem	ViewFileSystem	RANDOM	BAD
 adoop-common	ipc.ping.interval	 public static final int getPingInterval(Configuration conf)	org.apache.hadoop.ipc.Client	Client	60000	GOOD			
-hadoop-common	ipc.ping.interval	 public static final int getPingInterval(Configuration conf)	org.apache.hadoop.ipc.Client	Client	-60000	BAD			
+hadoop-common	ipc.ping.interval	 public static final int getPingInterval(Configuration conf)	org.apache.hadoop.ipc.Client	Client	-60000	BAD		
+hadoop-common	hadoop.util.hash.type	public static int getHashType(Configuration conf)	org.apache.hadoop.util.hash.Hash	Hash	murmur	GOOD			
+hadoop-common	hadoop.util.hash.type	public static int getHashType(Configuration conf)	org.apache.hadoop.util.hash.Hash	Hash	ABC	BAD 
+hadoop-common	ipc.client.connect.retry.interval	static ConnectionId getConnectionId(InetSocketAddress addr,Class<?> protocol, UserGroupInformation ticket, int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException	org.apache.hadoop.ipc.Client	Client1	1000	GOOD			
+hadoop-common	ipc.client.connect.retry.interval	static ConnectionId getConnectionId(InetSocketAddress addr,Class<?> protocol, UserGroupInformation ticket, int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException	org.apache.hadoop.ipc.Client	Client1	0.5	BAD			
+hadoop-common	ipc.client.connect.retry.interval	static ConnectionId getConnectionId(InetSocketAddress addr,Class<?> protocol, UserGroupInformation ticket, int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException	org.apache.hadoop.ipc.Client	Client1	abcd	BAD			
