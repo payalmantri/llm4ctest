@@ -18,3 +18,6 @@ hadoop-common	hadoop.util.hash.type	public static int getHashType(Configuration 
 hadoop-common	ipc.client.connect.retry.interval	static ConnectionId getConnectionId(InetSocketAddress addr,Class<?> protocol, UserGroupInformation ticket, int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException	org.apache.hadoop.ipc.Client	Client1	1000	GOOD			
 hadoop-common	ipc.client.connect.retry.interval	static ConnectionId getConnectionId(InetSocketAddress addr,Class<?> protocol, UserGroupInformation ticket, int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException	org.apache.hadoop.ipc.Client	Client1	0.5	BAD			
 hadoop-common	ipc.client.connect.retry.interval	static ConnectionId getConnectionId(InetSocketAddress addr,Class<?> protocol, UserGroupInformation ticket, int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException	org.apache.hadoop.ipc.Client	Client1	abcd	BAD			
+hadoop-common	hadoop.security.group.mapping.ldap.posix.attr.gid.name	public synchronized void setConf(Configuration conf)	org.apache.hadoop.security.LdapGroupsMapping	LdapGroupsMapping	gidNumber	GOOD
+hadoop-common	hadoop.security.group.mapping.ldap.posix.attr.gid.name	public synchronized void setConf(Configuration conf)	org.apache.hadoop.security.LdapGroupsMapping	LdapGroupsMapping	--0oj38	BAD
+
