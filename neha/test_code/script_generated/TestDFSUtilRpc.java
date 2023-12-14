@@ -17,34 +17,37 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
+import org.apache.hadoop.net.NetUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.util.Map;
 
-public class TestWebHdfsFileSystem {
+public class TestDFSUtil {
 
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
 
     @Before
     public void setUp() {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
-        
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
+    public void testRpcServiceAddressConfig() throws Exception {
+        Map<String, Map<String, InetSocketAddress>> rpcAddresses = DFSUtil.getNNServiceRpcAddresses(conf);
+
+        for (String nsId : rpcAddresses.keySet()) {
+            for (String nnId : rpcAddresses.get(nsId).keySet()) {
+                URI expectedUri = URI.create(conf.get(DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY + "." + nsId + "." + nnId));
+                InetSocketAddress expectedAddress = NetUtils.createSocketAddr(expectedUri.toString());
+                Assert.assertEquals(expectedAddress, rpcAddresses.get(nsId).get(nnId));
+            }
+        }
     }
 }

@@ -17,34 +17,26 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hdfs.server.namenode.ImageServlet;
+import org.apache.hadoop.hdfs.DataTransferThrottler;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-
-public class TestWebHdfsFileSystem {
+public class TestImageServlet {
 
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
 
     @Before
     public void setUp() {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
-        
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
+    public void testGetThrottlerConfiguration() {
+        DataTransferThrottler throttler = ImageServlet.getThrottler(conf);
+        long expectedBandwidth = Long.parseLong(conf.get("dfs.image.transfer.bandwidthPerSec"));
+        Assert.assertEquals(expectedBandwidth, throttler.getBytesPerSecond());
     }
 }

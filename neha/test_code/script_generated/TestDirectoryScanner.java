@@ -17,34 +17,36 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
+import org.apache.hadoop.hdfs.server.datanode.DirectoryScanner;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-
-public class TestWebHdfsFileSystem {
+public class TestDirectoryScanner {
 
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
+    private MiniDFSCluster cluster;
+    private FsDatasetSpi<?> fds;
+    private DirectoryScanner directoryScanner;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
+        cluster = new MiniDFSCluster.Builder(conf).build();
+        cluster.waitActive();
+        fds = DataNodeTestUtils.getFSDataset(cluster.getDataNodes().get(0));
+        directoryScanner = new DirectoryScanner(fds, conf);
+        directoryScanner.setScanPeriod(3600L, 0L, 3600L, 0L, 0L, 0L);
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
-        
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
+    public void testDirectoryScannerConfiguration() throws Exception {
+        int directoryScanThreads = conf.getInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_THREADS_KEY, 1);
+        Assert.assertEquals(directoryScanThreads, directoryScanner.getParallelism());
     }
 }

@@ -17,34 +17,31 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-
-public class TestWebHdfsFileSystem {
+public class TestFSNamesystem {
 
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
 
     @Before
     public void setUp() {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
-        
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
-    }
+    public void testWarmupEDEKCacheOnStartup() throws Exception {
+        int defaultDelay = conf.getInt(DFSConfigKeys.DFS_NAMENODE_EDEKCACHELOADER_INITIAL_DELAY_MS_KEY, DFSConfigKeys.DFS_NAMENODE_EDEKCACHELOADER_INITIAL_DELAY_MS_DEFAULT);
+        int customDelay = 500;
+
+        try (FSNamesystem fsn = FSNamesystem.createFileSystem(conf, null)) {
+            Assert.assertEquals(defaultDelay, fsn.getEDEKCacheLoaderDelay());
+            conf.setInt(DFSConfigKeys.DFS_NAMENODE_EDEKCACHELOADER_INITIAL_DELAY_MS_KEY, customDelay);
+            Assert.assertEquals(customDelay, fsn.getEDEKCacheLoaderDelay());
+        }
+    }  
 }
