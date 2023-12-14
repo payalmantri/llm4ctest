@@ -17,34 +17,31 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
+    import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.server.namenode.FSDirectory;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 
-public class TestWebHdfsFileSystem {
-
+public class TestFSDirectory {
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
+    private FSNamesystem fsNameSystem;
 
     @Before
     public void setUp() {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
+        fsNameSystem = FSNamesystem.loadFromDisk(conf);
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
-        
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
+    public void testMaxXattrSizeConfiguration() throws IOException {
+        FSDirectory directory = fsNameSystem.getFSDirectory();
+        String maxSizeStr = conf.get("dfs.namenode.fs-limits.max-xattr-size");
+        if (maxSizeStr != null) {
+            int maxSize = Integer.parseInt(maxSizeStr);
+            Assert.assertEquals(maxSize, directory.getXAttrMaxSize());
+        }
     }
 }

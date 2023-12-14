@@ -17,34 +17,33 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.io.IOException;
 
-public class TestWebHdfsFileSystem {
+public class TestDfsClientConf {
 
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
+    private DFSClient dfsClient;
 
     @Before
-    public void setUp() {
+    public void setUp() throws URISyntaxException, IOException {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
+        conf.addResource("hdfs-default.xml");
+        URI nameNodeURI = new URI("hdfs://localhost:8020");
+        dfsClient = new DFSClient(nameNodeURI, conf);
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
-        
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
+    public void testSlowIoWarningThreshold() {
+        long expectedThreshold = Long.parseLong(conf.get("dfs.client.slow.io.warning.threshold.ms"));
+        Assert.assertEquals(expectedThreshold, dfsClient.getConf().getSlowIoWarningThresholdMs());
     }
 }

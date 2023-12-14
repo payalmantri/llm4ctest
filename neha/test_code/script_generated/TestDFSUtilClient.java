@@ -17,34 +17,33 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtilClient;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 
-public class TestWebHdfsFileSystem {
+public class TestDFSUtilClient {
 
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
 
     @Before
     public void setUp() {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
+        conf.set(DFSConfigKeys.DFS_USER_HOME_DIR_PREFIX_KEY, "/user");
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
+    public void testHomeDirectoryConfiguration() throws IOException {
+        UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
         
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
+        String homeDirectory = DFSUtilClient.getHomeDirectory(conf, ugi);
+        String expectedHomeDirectory = conf.get(DFSConfigKeys.DFS_USER_HOME_DIR_PREFIX_KEY) + "/" + ugi.getShortUserName();
+        
+        Assert.assertEquals(expectedHomeDirectory, homeDirectory);
     }
 }

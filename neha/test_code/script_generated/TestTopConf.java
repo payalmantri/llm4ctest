@@ -17,34 +17,34 @@
      */
     package org.apache.hadoop.llmgenerated;
 
-import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.Assume;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-
-public class TestWebHdfsFileSystem {
+public class TestTopConf {
 
     private Configuration conf;
-    private WebHdfsFileSystem webhdfs;
-    private static final String WEBHDFS_SOCKET_TIMEOUT = "dfs.webhdfs.socket.connect-timeout";
 
     @Before
     public void setUp() {
         conf = new Configuration();
-        webhdfs = new WebHdfsFileSystem();
     }
 
     @Test
-    public void testSocketTimeoutConfiguration() throws IOException, URISyntaxException {
-        URI defaultUri = new URI("webhdfs://localhost:50070");
-        webhdfs.initialize(defaultUri, conf);
+    public void testTopConf() {
         
-        Assert.assertEquals(conf.get(WEBHDFS_SOCKET_TIMEOUT), webhdfs.getConf().get(WEBHDFS_SOCKET_TIMEOUT));
+        TopConf topConf = new TopConf(conf);
+        int[] expectedWindowsMins = new int[] {1, 5, 25};
+        int[] actualWindowsMins = TopConf.getWindowsMinutes(conf);
+
+        Assert.assertArrayEquals(expectedWindowsMins, actualWindowsMins);
+        
+        String expectedReportName = conf.get(TopConf.NNTOP_CONFIGURED_REPORT_KEY, "");
+        String actualReportName = TopConf.getConfiguredReport(conf);
+
+        Assert.assertEquals(expectedReportName, actualReportName);
+       
     }
 }
